@@ -43,7 +43,7 @@ var refundScript = redis.NewScript(`
 `)
 
 func initDB() *gorm.DB {
-	host := "93.127.180.138"
+	host := "localhost"
 	port := 5432
 	user := "postgres"
 	password := "yourStrongPassword"
