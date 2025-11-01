@@ -43,7 +43,7 @@ var refundScript = redis.NewScript(`
 `)
 
 func initDB() *gorm.DB {
-	host := "localhost"
+	host := "93.127.180.138"
 	port := 5432
 	user := "postgres"
 	password := "yourStrongPassword"
@@ -106,7 +106,49 @@ type messageDto struct {
 
 func messagesSentLogHandler(c *gin.Context) {
 	clientID := c.GetHeader("X-Client-ID")
-	c.JSON(http.StatusOK, gin.H{"status": clientID})
+	if clientID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing client id"})
+		return
+	}
+
+	status := c.Query("status")
+	msgType := c.Query("type")
+	fromDate := c.Query("from_date")
+	toDate := c.Query("to_date")
+
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	offset := (page - 1) * pageSize
+
+	query := db.Model(&models.Message{}).Where("client_id = ?", clientID)
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+	if msgType != "" {
+		query = query.Where("type = ?", msgType)
+	}
+	if fromDate != "" {
+		query = query.Where("queued_at >= ?", fromDate)
+	}
+	if toDate != "" {
+		query = query.Where("queued_at <= ?", toDate)
+	}
+
+	var total int64
+	query.Count(&total)
+	var messages []models.Message
+	if err := query.Order("queued_at desc").Limit(pageSize).Offset(offset).Find(&messages).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"page":       page,
+		"page_size":  pageSize,
+		"total":      total,
+		"total_pages": (total + int64(pageSize) - 1) / int64(pageSize),
+		"messages":   messages,
+	})
 }
 
 type creditDto struct {
